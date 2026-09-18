@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snake</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f5f7ef;
+      --muted: #9ca796;
+      --panel: #172019;
+      --line: #344237;
+      --accent: #c8f36b;
+      --accent-dark: #8bb83e;
+      --food: #ff916b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      overflow: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 15%, rgba(200, 243, 107, 0.08), transparent 28%),
+        radial-gradient(circle at 85% 85%, rgba(255, 145, 107, 0.07), transparent 25%),
+        #0d120f;
+      font-family: Georgia, 'Times New Roman', serif;
+    }
+
+    main { width: min(100%, 560px); }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--accent);
+      font-size: clamp(2.5rem, 10vw, 4.5rem);
+      font-weight: 400;
+      line-height: 0.85;
+      letter-spacing: -0.04em;
+    }
+
+    .score-label {
+      color: var(--muted);
+      font-family: 'Courier New', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .score {
+      display: block;
+      margin-top: 2px;
+      color: var(--ink);
+      font-family: 'Courier New', monospace;
+      font-size: 1.6rem;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .board-wrap {
+      position: relative;
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      background-color: #111a13;
+      background-image:
+        linear-gradient(rgba(156, 167, 150, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(156, 167, 150, 0.06) 1px, transparent 1px);
+      background-size: 5% 5%;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 10px;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(13, 18, 15, 0.82);
+      text-align: center;
+    }
+
+    .overlay[hidden] { display: none; }
+
+    .message h2 {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: clamp(1.8rem, 7vw, 2.8rem);
+      font-weight: 400;
+    }
+
+    .message p {
+      margin: 0;
+      color: var(--muted);
+      font-family: 'Courier New', monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+    }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-family: 'Courier New', monospace;
+      font-size: 0.7rem;
+      line-height: 1.5;
+    }
+
+    kbd {
+      padding: 2px 5px;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: var(--panel);
+    }
+
+    @media (max-width: 420px) {
+      body { padding: 14px; }
+      footer { display: block; }
+      footer span + span { display: block; margin-top: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Snake</h1>
+      <div>
+        <span class="score-label">Score</span>
+        <span class="score" id="score">0</span>
+      </div>
+    </header>
+
+    <div class="board-wrap">
+      <canvas id="board" width="400" height="400" aria-label="Snake game board"></canvas>
+      <div class="overlay" id="overlay" hidden>
+        <div class="message">
+          <h2 id="status">Game over</h2>
+          <p>Press <kbd>Space</kbd> to play again</p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span>Arrow keys to move</span>
+      <span><kbd>Space</kbd> restart</span>
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById('board');
+      const context = canvas.getContext('2d');
+      const scoreElement = document.getElementById('score');
+      const overlay = document.getElementById('overlay');
+      const statusElement = document.getElementById('status');
+      const gridSize = 20;
+      const cellSize = canvas.width / gridSize;
+      const stepTime = 105;
+
+      let snake;
+      let food;
+      let direction;
+      let nextDirection;
+      let score;
+      let gameOver;
+      let lastStep = 0;
+
+      function randomFood() {
+        let position;
+        do {
+          position = {
+            x: Math.floor(Math.random() * gridSize),
+            y: Math.floor(Math.random() * gridSize)
+          };
+        } while (snake.some(segment => segment.x === position.x && segment.y === position.y));
+        return position;
+      }
+
+      function startGame() {
+        snake = [
+          { x: 10, y: 10 },
+          { x: 9, y: 10 },
+          { x: 8, y: 10 }
+        ];
+        direction = { x: 1, y: 0 };
+        nextDirection = { x: 1, y: 0 };
+        score = 0;
+        gameOver = false;
+        scoreElement.textContent = score;
+        overlay.hidden = true;
+        food = randomFood();
+        draw();
+      }
+
+      function endGame() {
+        gameOver = true;
+        statusElement.textContent = 'Game over';
+        overlay.hidden = false;
+      }
+
+      function move() {
+        direction = nextDirection;
+        const head = snake[0];
+        const newHead = {
+          x: head.x + direction.x,
+          y: head.y + direction.y
+        };
+        const hitWall = newHead.x < 0 || newHead.x >= gridSize || newHead.y < 0 || newHead.y >= gridSize;
+        const hitSelf = snake.some(segment => segment.x === newHead.x && segment.y === newHead.y);
+
+        if (hitWall || hitSelf) {
+          endGame();
+          return;
+        }
+
+        snake.unshift(newHead);
+        if (newHead.x === food.x && newHead.y === food.y) {
+          score += 1;
+          scoreElement.textContent = score;
+          food = randomFood();
+        } else {
+          snake.pop();
+        }
+      }
+
+      function drawCell(position, color, inset = 2) {
+        context.fillStyle = color;
+        context.fillRect(
+          position.x * cellSize + inset,
+          position.y * cellSize + inset,
+          cellSize - inset * 2,
+          cellSize - inset * 2
+        );
+      }
+
+      function draw() {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        drawCell(food, '#ff916b', 3);
+        snake.forEach((segment, index) => {
+          drawCell(segment, index === 0 ? '#e5ff9e' : '#9dcc4f', index === 0 ? 1 : 2);
+        });
+      }
+
+      function frame(timestamp) {
+        if (!gameOver && timestamp - lastStep >= stepTime) {
+          move();
+          draw();
+          lastStep = timestamp;
+        }
+        requestAnimationFrame(frame);
+      }
+
+      document.addEventListener('keydown', event => {
+        const controls = {
+          ArrowUp: { x: 0, y: -1 },
+          ArrowDown: { x: 0, y: 1 },
+          ArrowLeft: { x: -1, y: 0 },
+          ArrowRight: { x: 1, y: 0 }
+        };
+
+        if (event.key === ' ') {
+          event.preventDefault();
+          if (gameOver) startGame();
+          return;
+        }
+
+        const newDirection = controls[event.key];
+        if (!newDirection) return;
+        event.preventDefault();
+        if (newDirection.x + direction.x !== 0 || newDirection.y + direction.y !== 0) {
+          nextDirection = newDirection;
+        }
+      });
+
+      startGame();
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
